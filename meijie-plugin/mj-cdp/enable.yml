@@ -1,0 +1,6 @@
+# Enable the mj-cdp row that mj-cdp/cordis.yml inserts (id-targeted override).
+#
+# Usage (applied AFTER the insert patch, in argv order):
+#   pnpm dsh web --patch ./meijie-plugin/mj-cdp/cordis.yml --patch ./meijie-plugin/mj-cdp/enable.yml
+- id: mj-cdp
+  disabled: false

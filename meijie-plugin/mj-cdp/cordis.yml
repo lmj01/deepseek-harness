@@ -1,0 +1,30 @@
+# mj-cdp 的加载补丁（loader patch overlay）。
+#
+# 这是一个顶层 YAML 数组（loader patch entries），通过 `dsh` 的补丁机制注入：
+#   - `dsh web --patch ./meijie-plugin/mj-cdp/cordis.yml` （临时 overlay，推荐开发期使用）
+#   - 或把整段内容放进 `$DSH_HOME/profiles/web/cordis.patch.yml`（持久化，配置改动热加载）
+#
+# `name` 是插件源码文件的绝对路径：插件的相对路径会以 profile 目录
+# （如 ~/.dsh/profiles/web/）为基准解析，而不是本文件所在目录，所以这里必须写绝对路径。
+- insert:
+  - id: mj-cdp
+    name: '/home/meiji/agents/deepseek-harness/meijie-plugin/mj-cdp/src/index.ts'
+    # 默认不启用：插件会随 patch 插入但保持 disabled（不激活、不拉起 Chrome）。
+    # 需要时二选一：
+    #   1) 把这里改成 `disabled: false`
+    #   2) 再加一个 overlay：`- id: mj-cdp` + `  disabled: false`（id 定点覆盖）
+    disabled: true
+    config:
+      # ── 方式 A：用 chrome-launcher 自己启动浏览器（推荐，无需手动开调试端口）──
+      # WSL 里启动 Windows Chrome：路径必须写 WSL 挂载路径（/mnt/e/...），
+      # chrome-launcher 会自动把 --user-data-dir 转成 E:\... 传给 Windows chrome。
+      # chromePath: '/mnt/e/portableApp/GoogleChromePortable64/App/Chrome-bin/chrome.exe'
+      # userDataDir: '/mnt/e/portableApp/GoogleChromePortable64/App/DefaultData/profile/Default'
+      # chromePort: 0        # 调试端口，0 = 随机
+      # headless: true       # false 则打开可见窗口
+      # launchOnLoad: true   # 插件加载时立即启动 Chrome（否则首次调工具时才启动）
+      # ── 方式 B：连接已运行的浏览器 ────────────────────────────────────
+      # cdpEndpoint: 'http://127.0.0.1:9222'
+      # cdpOutputDir: '/tmp/mj-cdp'   # 截图保存目录（默认 os.tmpdir()/mj-cdp）
+      # maxConsoleEntries: 200        # cdp_console 每页缓冲上限
+      # verbose: true                 # 打印每次工具调用

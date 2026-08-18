@@ -8,11 +8,16 @@
 meijie-plugin/
 ├── tsconfig.json          # 库级类型检查配置（include mj-*/src、mj-*/scripts，新插件无需改）
 ├── README.md              # 本文件：插件库总览
-└── mj-figma/              # 第一个插件：Figma REST API 读取 + 演示工具
-    ├── cordis.yml         # mj-figma 的加载补丁（--patch 指向它）
-    ├── src/               # 插件源码（index.ts 入口 + figma.ts REST 客户端）
-    ├── scripts/           # verify-boot.ts 端到端验证
-    └── README.md          # mj-figma 使用说明
+├── mj-figma/              # Figma REST API 读取 + 演示工具
+│   ├── cordis.yml         # mj-figma 的加载补丁（--patch 指向它）
+│   ├── src/               # 插件源码（index.ts 入口 + figma.ts REST 客户端）
+│   ├── scripts/           # verify-boot.ts 端到端验证
+│   └── README.md          # mj-figma 使用说明
+└── mj-cdp/                # CDP 连接当前浏览器：分析前端数据与效果
+    ├── cordis.yml         # mj-cdp 的加载补丁
+    ├── src/               # index.ts 入口 + cdp.ts CDP 客户端（HTTP+WebSocket）
+    ├── scripts/           # verify-boot.ts 端到端验证（内置 WebSocket mock CDP）
+    └── README.md          # mj-cdp 使用说明
 ```
 
 ## 插件列表
@@ -20,10 +25,11 @@ meijie-plugin/
 | 插件 | 目录 | 工具 | 说明 |
 | --- | --- | --- | --- |
 | mj-figma | `mj-figma/` | `greet` / `flaky_echo` / `figma_get_node` / `figma_render` | 演示配置驱动工具 + 通过 Figma REST API 读取设计稿内容 |
+| mj-cdp | `mj-cdp/` | `cdp_targets` / `cdp_evaluate` / `cdp_screenshot` / `cdp_console` | 通过 CDP 分析前端数据与效果；支持 chrome-launcher 指定 `chromePath` 自动启动浏览器，或连接已运行浏览器的调试端口 |
 
 ## 如何启动某个插件
 
-前提：deepseek-harness 仓库已 `pnpm install`；启动走 tsx 源码解析，运行时不需要额外构建（只有 `tsc` 类型检查需要 `pnpm run build:lib` 产出的 `lib/types`）。
+前提：deepseek-harness 仓库已 `pnpm install`；启动走 tsx 源码解析，运行时不需要额外构建（只有 `tsc` 类型检查需要 `pnpm run build:lib` 产出的 `lib/types`）。插件库自身的依赖（目前是 mj-cdp 用的 `chrome-launcher`）在 `meijie-plugin/package.json` 声明，首次使用前执行一次 `cd meijie-plugin && npm install`。
 
 以 mj-figma 为例，从仓库根目录把它作为 `--patch` overlay 注入 web profile：
 

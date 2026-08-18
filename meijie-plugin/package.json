@@ -1,0 +1,10 @@
+{
+  "name": "meijie-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSeek Harness plugin library (mj-* plugins).",
+  "type": "module",
+  "dependencies": {
+    "chrome-launcher": "^1.1.0"
+  }
+}

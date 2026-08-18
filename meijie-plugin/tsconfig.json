@@ -29,6 +29,7 @@
     { "path": "../packages/core/session" },
     { "path": "../packages/boot/app-boot" },
     { "path": "../packages/llm/llm" },
-    { "path": "../packages/credentials/credentials" }
+    { "path": "../packages/credentials/credentials" },
+    { "path": "../packages/host/webserver" }
   ]
 }
