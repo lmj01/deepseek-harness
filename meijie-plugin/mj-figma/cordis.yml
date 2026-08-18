@@ -1,0 +1,21 @@
+# mj-figma 的加载补丁（loader patch overlay）。
+#
+# 这是一个顶层 YAML 数组（loader patch entries），通过 `dsh` 的补丁机制注入：
+#   - `dsh web --patch ./meijie-plugin/mj-figma/cordis.yml`  （临时 overlay，推荐开发期使用）
+#   - 或把整段内容放进 `$DSH_HOME/profiles/web/cordis.patch.yml`（持久化，配置改动热加载）
+#
+# `name` 是插件源码文件的绝对路径：插件的相对路径会以 profile 目录
+# （如 ~/.dsh/profiles/web/）为基准解析，而不是本文件所在目录，所以这里必须写绝对路径。
+- insert:
+  - id: mj-figma
+    name: '/home/meiji/agents/deepseek-harness/meijie-plugin/mj-figma/src/index.ts'
+    config:
+      greeting: 'Hi lmj01'
+      maxRetries: 5
+      # verbose: true  # 打开后每次工具调用都会打印日志
+      # ── Figma 接入（可选）─────────────────────────────────────────────
+      # 令牌优先级：FIGMA_TOKEN 凭据（~/.dsh/.credentials.yaml / 环境变量）> 此处 figmaToken。
+      # figmaToken: 'figd_xxx'
+      # figmaFileKey: 'xxxxxxxxxxxx'        # 默认文件 key，工具调用可省略 fileKey
+      # figmaOutputDir: '/tmp/mj-figma'     # 渲染图片下载目录（默认 os.tmpdir()/mj-figma）
+      # figmaMaxNodes: 2000                 # figma_get_node 遍历节点数上限
