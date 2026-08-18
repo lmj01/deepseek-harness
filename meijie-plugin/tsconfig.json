@@ -1,0 +1,34 @@
+{
+  // Editor / typecheck config for the whole plugin library. It extends the
+  // harness root base so `@deepseek-ai/*` imports resolve through the same
+  // `paths` facade the tsx source launch uses at runtime. Every `mj-*/` plugin
+  // is covered by the include patterns, so a new plugin needs no tsconfig work.
+  //
+  // The `references` entries are the important part: the vendored Cordis stack
+  // only typechecks under its own relaxed compiler flags, so instead of
+  // re-compiling those sources inside this program, TypeScript consumes each
+  // referenced project's built declarations (`lib/types`). Run
+  // `pnpm --filter @deepseek-ai/dsh-root run build:lib:host` (or at least
+  // `tsc -b` on the referenced projects) after the harness sources change.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  "include": ["mj-*/src", "mj-*/scripts"],
+  "references": [
+    { "path": "../vendor/cordis" },
+    { "path": "../vendor/schemastery" },
+    { "path": "../vendor/include" },
+    { "path": "../packages/core/tools" },
+    { "path": "../packages/core/session" },
+    { "path": "../packages/boot/app-boot" },
+    { "path": "../packages/llm/llm" },
+    { "path": "../packages/credentials/credentials" }
+  ]
+}
