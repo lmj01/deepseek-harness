@@ -10,8 +10,6 @@
   - id: mj-figma
     name: '/home/meiji/agents/deepseek-harness/meijie-plugin/mj-figma/src/index.ts'
     config:
-      greeting: 'Hi lmj01'
-      maxRetries: 5
       # verbose: true  # 打开后每次工具调用都会打印日志
       # ── Figma 接入（可选）─────────────────────────────────────────────
       # 令牌优先级：FIGMA_TOKEN 凭据（~/.dsh/.credentials.yaml / 环境变量）> 此处 figmaToken。

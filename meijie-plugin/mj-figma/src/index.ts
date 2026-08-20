@@ -1,12 +1,7 @@
 /**
- * mj-figma — a Harness plugin that registers model-facing tools and exercises
- * its own configuration.
+ * mj-figma — a Harness plugin that reads Figma design files through the
+ * Figma REST API and exercises its own configuration.
  *
- * - `greet` returns the configured `greeting` prefix plus the addressed name.
- * - `flaky_echo` simulates a flaky operation: the first `failures` invocations
- *   throw, later ones succeed, and `maxRetries` caps how many failures the
- *   plugin tolerates. The agent loop observes the thrown errors and retries,
- *   which is what makes the retry cap observable end to end.
  * - `figma_get_node` reads a Figma design file through the REST API and
  *   returns a condensed, model-readable node tree (identity, type, TEXT
  *   characters).
@@ -14,7 +9,7 @@
  *   and a local copy that the harness `read_image` tool can view.
  *
  * `verbose` gates per-call stdout logging so a quiet deployment can turn the
- * demo's chatter off. The Figma token resolves per call from the `credentials`
+ * chatter off. The Figma token resolves per call from the `credentials`
  * service (`FIGMA_TOKEN`) when mounted, then the `FIGMA_TOKEN` environment
  * variable, then the `figmaToken` config field — never cached.
  *
@@ -41,10 +36,6 @@ export const name = 'mj-figma'
 export const inject = ['tools']
 
 export interface Config {
-  /** Greeting prefix the `greet` tool prepends to the addressed name. */
-  greeting: string
-  /** Retry cap for `flaky_echo`: the number of simulated failures must stay below it. */
-  maxRetries: number
   /** Log every tool invocation to stdout. */
   verbose?: boolean
   /** Figma token fallback; the `FIGMA_TOKEN` credential or environment variable wins. */
@@ -58,8 +49,6 @@ export interface Config {
 }
 
 export const Config: Schema<Config> = Schema.object({
-  greeting: Schema.string().default('lmj01'),
-  maxRetries: Schema.number().default(3),
   verbose: Schema.boolean().default(false),
   figmaToken: Schema.string(),
   figmaFileKey: Schema.string(),
@@ -72,7 +61,7 @@ export function apply(ctx: Context, config: Config): void {
     if (config.verbose) console.log(`[mj-figma] ${message}`)
   }
 
-  console.log(`[mj-figma] plugin loaded (greeting=${config.greeting}, maxRetries=${config.maxRetries}, verbose=${config.verbose})`)
+  console.log(`[mj-figma] plugin loaded (verbose=${config.verbose})`)
 
   // Explicit resolve step: the deployment's render output directory, defaulted
   // once at load (a hidden `?? default` inside a tool run would hide it).
@@ -138,53 +127,6 @@ export function apply(ctx: Context, config: Config): void {
     await writeFile(localPath, bytes)
     return localPath
   }
-
-  ctx.tools.register(defineTool({
-    name: 'greet',
-    description: `Greet someone by name, using the configured greeting prefix (currently ${config.greeting}).`,
-    parameters: {
-      name: { type: 'string', required: true, description: 'The name to greet.' },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    async execute(args) {
-      log(`greet(${JSON.stringify(args.name)})`)
-      return `${config.greeting}, ${args.name}!`
-    },
-  }))
-
-  // Per-plugin closure state: how many `flaky_echo` invocations have run since
-  // the plugin loaded. Ordinary plugin state, reset by a plugin reload.
-  let attempts = 0
-  ctx.tools.register(defineTool({
-    name: 'flaky_echo',
-    description: `Echo text back after simulating a flaky operation: the first \`failures\` invocations throw and later ones succeed. The configured maxRetries (currently ${config.maxRetries}) caps how many failures are tolerated; requesting failures at or above the cap fails immediately.`,
-    parameters: {
-      text: { type: 'string', required: true, description: 'Text to echo.' },
-      failures: {
-        type: 'number',
-        description: 'How many consecutive invocations should fail before success (default 0).',
-      },
-    },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
-    async execute(args) {
-      const failures = args.failures ?? 0
-      if (failures >= config.maxRetries) {
-        throw new Error(`flaky_echo: failures=${failures} is not below maxRetries=${config.maxRetries}`)
-      }
-      attempts += 1
-      if (attempts <= failures) {
-        throw new Error(`flaky_echo: simulated failure ${attempts} of ${failures}`)
-      }
-      log(`flaky_echo: success on attempt ${attempts}`)
-      return args.text
-    },
-  }))
 
   ctx.tools.register(defineTool({
     name: 'figma_get_node',

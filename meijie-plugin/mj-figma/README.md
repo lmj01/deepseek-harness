@@ -17,12 +17,10 @@ meijie-plugin/mj-figma/
 
 ## 插件做什么
 
-加载后注册四个工具：
+加载后注册两个工具：
 
 | 工具 | 行为 |
 | --- | --- |
-| `greet` | 用配置里的 `greeting` 前缀问候指定名字，例如配置 `greeting: 'Hi lmj01'` 时 `greet(name: "World")` 返回 `Hi lmj01, World!` |
-| `flaky_echo` | 模拟一个“抖动”操作：前 `failures` 次调用抛错（模型会看到错误并重试），之后成功；`maxRetries` 是允许的最大失败次数上限，请求 `failures >= maxRetries` 时立即失败 |
 | `figma_get_node` | 通过 Figma REST API 读取设计稿（整个文件或单个节点），返回压缩后的模型可读节点树：id / name / type / TEXT 文本 |
 | `figma_render` | 把 Figma 节点渲染成图片（png / jpg / svg），返回签名 URL 并下载到本地，配合 harness 的 `read_image` 工具即可让模型真正“看到”设计稿 |
 
@@ -30,8 +28,6 @@ meijie-plugin/mj-figma/
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `greeting` | `'lmj01'` | `greet` 使用的前缀 |
-| `maxRetries` | `3` | `flaky_echo` 的失败次数上限 |
 | `verbose` | `false` | 为 `true` 时每次工具调用打印一行日志 |
 | `figmaToken` | — | Figma 令牌备用字段；优先级：`FIGMA_TOKEN` 凭据 > 环境变量 > 此字段 |
 | `figmaFileKey` | — | 默认 Figma 文件 key，工具调用可省略 `fileKey` 参数 |
@@ -70,12 +66,12 @@ cd /home/meiji/agents/deepseek-harness
 pnpm dsh web --patch ./meijie-plugin/mj-figma/cordis.yml
 ```
 
-浏览器打开 http://127.0.0.1:3080 ，在对话里让 agent 调用 `greet` / `flaky_echo` / `figma_get_node` / `figma_render` 即可看到效果。
+浏览器打开 http://127.0.0.1:3080 ，在对话里让 agent 调用 `figma_get_node` / `figma_render` 即可看到效果。
 
 启动日志（web 进程的 stdout）里会出现：
 
 ```
-[mj-figma] plugin loaded (greeting=Hi lmj01, maxRetries=5, verbose=false)
+[mj-figma] plugin loaded (verbose=false)
 ```
 
 ### 方式二：持久化到 profile 的补丁层
@@ -93,7 +89,7 @@ profile 补丁层是热加载的：只改 `config` 里的值不用重启，改�
 任意 profile 都可以带同一份 patch：
 
 ```sh
-pnpm dsh --profile headless --patch ./meijie-plugin/mj-figma/cordis.yml "call the greet tool with name World"
+pnpm dsh --profile headless --patch ./meijie-plugin/mj-figma/cordis.yml "list the files in figma file <fileKey>"
 ```
 
 ### 验证是否已注入
@@ -108,7 +104,7 @@ pnpm dsh web --dump-config --patch ./meijie-plugin/mj-figma/cordis.yml
 
 ```sh
 node --import tsx/esm meijie-plugin/mj-figma/scripts/verify-boot.ts
-# 期望输出: verify-boot PASSED: mj-figma activated, tools greet/flaky_echo/figma_get_node/figma_render behave as configured
+# 期望输出: verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_render behave as configured
 ```
 
 ## 工作原理（为什么这样能跑起来）
@@ -122,6 +118,6 @@ node --import tsx/esm meijie-plugin/mj-figma/scripts/verify-boot.ts
 
 - **`Cannot find package '@deepseek-ai/...'`**：不要用 `node script.ts` 直接跑，必须从仓库根目录经 `pnpm dsh ...` 或 `node --import tsx/esm ...` 启动，让 tsx 的 paths 解析生效。
 - **`--patch` 文件不存在或格式不对**：启动会 fail loud，报 `failed to read overlay` / `failed to parse overlay`，检查路径与 YAML 缩进（`insert:` 下的子项要缩进两级）。
-- **`greet` 工具在 GUI 里看不到**：确认启动命令带了 `--patch ./meijie-plugin/mj-figma/cordis.yml`，并用 `--dump-config` 确认组合树里有 `mj-figma` 行。
+- **Figma 工具在 GUI 里看不到**：确认启动命令带了 `--patch ./meijie-plugin/mj-figma/cordis.yml`，并用 `--dump-config` 确认组合树里有 `mj-figma` 行。
 - **Figma 工具报 `no token configured`**：在 `~/.dsh/.credentials.yaml` 加 `FIGMA_TOKEN: figd_xxx`（或设环境变量），改完**无需重启**（每次调用重新解析）。
 - **`figma_render` 下载的图片 `read_image` 读不到**：`read_image` 受 profile 文件沙箱策略约束，默认输出目录在系统临时目录；把 `figmaOutputDir` 配到工作区内的路径（或提高权限模式）即可。

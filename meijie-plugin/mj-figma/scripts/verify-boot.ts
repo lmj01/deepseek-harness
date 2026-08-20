@@ -5,9 +5,6 @@
  * patch (so the file format is exercised) plus a `tools` provider, then asserts
  * the plugin activates and its tools behave as configured:
  *
- * - `greet` returns the configured greeting prefix + name.
- * - `flaky_echo` simulates `failures` consecutive failures, then succeeds, and
- *   rejects a request at or above `maxRetries` immediately.
  * - `figma_get_node` / `figma_render` read and render a Figma file through a
  *   STUBBED transport (`globalThis.fetch`): the REST client and tools are
  *   exercised end to end without network or a real token.
@@ -70,8 +67,7 @@ try {
 
   const tools = ctx.tools
   const schemas = tools.schemas()
-  if (!schemas.some(schema => schema.name === 'greet')) fail('greet tool not registered')
-  if (!schemas.some(schema => schema.name === 'flaky_echo')) fail('flaky_echo tool not registered')
+  if (!schemas.some(schema => schema.name === 'figma_get_node')) fail('figma_get_node tool not registered')
 
   const signal = new AbortController().signal
   let callId = 0
@@ -81,25 +77,6 @@ try {
     arguments: args,
     signal,
   })
-
-  const greet = await run('greet', { name: 'World' })
-  if (greet.isError || greet.value !== 'Hi lmj01, World!') {
-    fail(`greet returned ${JSON.stringify(greet)}`)
-  }
-
-  const failure1 = await run('flaky_echo', { text: 'ping', failures: 2 })
-  if (!failure1.isError) fail('flaky_echo attempt 1 should have failed')
-  const failure2 = await run('flaky_echo', { text: 'ping', failures: 2 })
-  if (!failure2.isError) fail('flaky_echo attempt 2 should have failed')
-  const success = await run('flaky_echo', { text: 'ping', failures: 2 })
-  if (success.isError || success.value !== 'ping') {
-    fail(`flaky_echo attempt 3 should have succeeded, got ${JSON.stringify(success)}`)
-  }
-
-  const capped = await run('flaky_echo', { text: 'ping', failures: 5 })
-  if (!capped.isError || !JSON.stringify(capped.content).includes('maxRetries=5')) {
-    fail(`flaky_echo should have been capped by maxRetries, got ${JSON.stringify(capped)}`)
-  }
 
   // ── Figma tools against a stubbed transport ────────────────────────────────
   const previousFetch = globalThis.fetch
@@ -189,7 +166,7 @@ try {
     for (const path of renderedPath) await rm(path, { force: true })
   }
 
-  console.log(`verify-boot PASSED: mj-figma activated, tools greet/flaky_echo/figma_get_node/figma_render behave as configured (maxRetries=5, greeting='Hi lmj01')`)
+  console.log('verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_render behave as configured')
 } finally {
   await ctx?.fiber.dispose()
   await rm(tempDir, { recursive: true, force: true })
