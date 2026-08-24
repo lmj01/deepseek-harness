@@ -67,7 +67,9 @@ try {
 
   const tools = ctx.tools
   const schemas = tools.schemas()
-  if (!schemas.some(schema => schema.name === 'figma_get_node')) fail('figma_get_node tool not registered')
+  for (const expected of ['figma_get_node', 'figma_get_comments', 'figma_render']) {
+    if (!schemas.some(schema => schema.name === expected)) fail(`${expected} tool not registered`)
+  }
 
   const signal = new AbortController().signal
   let callId = 0
@@ -106,6 +108,22 @@ try {
       if (url.includes('/images/')) {
         return new Response(JSON.stringify({ images: { '2:2': 'https://img.example/render.png' } }),
           { headers: { 'content-type': 'application/json' } })
+      }
+      if (url.endsWith('/files/abc/comments')) {
+        return new Response(JSON.stringify({
+          comments: [
+            {
+              id: '101', user: { handle: 'Alice' }, created_at: '2026-01-02T03:04:05.000Z',
+              resolved_at: null, message: 'check this button', parent_id: '', order_id: '1',
+              client_meta: { node_id: '2:2' }, reactions: [],
+            },
+            {
+              id: '102', user: { handle: 'Bob' }, created_at: '2026-01-03T00:00:00.000Z',
+              resolved_at: '2026-01-04T00:00:00.000Z', message: 'fixed', parent_id: '101', order_id: '2',
+              client_meta: {}, reactions: [],
+            },
+          ],
+        }), { headers: { 'content-type': 'application/json' } })
       }
       if (url === 'https://api.figma.com/v1/files/abc') {
         return new Response(JSON.stringify({
@@ -148,6 +166,26 @@ try {
       fail(`figma_get_node node subtree wrong: ${JSON.stringify(node)}`)
     }
 
+    const comments = await run('figma_get_comments', { fileKey: 'abc' })
+    const commentsValue = comments.value as {
+      fileKey: string
+      comments: Array<{
+        id: string; user: string; message: string
+        parentId?: string; resolvedAt?: string; nodeId?: string
+      }>
+    }
+    if (comments.isError || commentsValue.fileKey !== 'abc' || commentsValue.comments.length !== 2) {
+      fail(`figma_get_comments wrong: ${JSON.stringify(comments)}`)
+    }
+    const first = commentsValue.comments[0]
+    const second = commentsValue.comments[1]
+    if (first?.user !== 'Alice' || first?.message !== 'check this button' || first?.nodeId !== '2:2' || first?.parentId !== undefined) {
+      fail(`figma_get_comments first entry wrong: ${JSON.stringify(first)}`)
+    }
+    if (second?.parentId !== '101' || second?.resolvedAt !== '2026-01-04T00:00:00.000Z' || second?.nodeId !== undefined) {
+      fail(`figma_get_comments second entry wrong: ${JSON.stringify(second)}`)
+    }
+
     const render = await run('figma_render', { fileKey: 'abc', nodeId: '2-2' })
     const renderValue = render.value as { url: string; localPath: string; format: string }
     if (render.isError) fail(`figma_render failed: ${JSON.stringify(render.content)}`)
@@ -166,7 +204,7 @@ try {
     for (const path of renderedPath) await rm(path, { force: true })
   }
 
-  console.log('verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_render behave as configured')
+  console.log('verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_get_comments/figma_render behave as configured')
 } finally {
   await ctx?.fiber.dispose()
   await rm(tempDir, { recursive: true, force: true })

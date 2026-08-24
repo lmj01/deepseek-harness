@@ -17,11 +17,12 @@ meijie-plugin/mj-figma/
 
 ## 插件做什么
 
-加载后注册两个工具：
+加载后注册三个工具：
 
 | 工具 | 行为 |
 | --- | --- |
 | `figma_get_node` | 通过 Figma REST API 读取设计稿（整个文件或单个节点），返回压缩后的模型可读节点树：id / name / type / TEXT 文本 |
+| `figma_get_comments` | 读取设计稿评论：评论人 / 时间 / 文本 / 回复与已解决标记 / 评论锚定的节点 id（Figma API 不暴露评论里的图片，想看对应视觉用 `figma_render` 渲染锚定节点） |
 | `figma_render` | 把 Figma 节点渲染成图片（png / jpg / svg），返回签名 URL 并下载到本地，配合 harness 的 `read_image` 工具即可让模型真正“看到”设计稿 |
 
 配置字段：
@@ -104,7 +105,7 @@ pnpm dsh web --dump-config --patch ./meijie-plugin/mj-figma/cordis.yml
 
 ```sh
 node --import tsx/esm meijie-plugin/mj-figma/scripts/verify-boot.ts
-# 期望输出: verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_render behave as configured
+# 期望输出: verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_get_comments/figma_render behave as configured
 ```
 
 ## 工作原理（为什么这样能跑起来）

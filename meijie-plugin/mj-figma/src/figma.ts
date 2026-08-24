@@ -57,6 +57,7 @@ export class FigmaApiError extends Error {
 export interface FigmaClient {
   getFile(fileKey: string): Promise<unknown>
   getNode(fileKey: string, nodeId: string): Promise<unknown>
+  getComments(fileKey: string): Promise<unknown>
   render(fileKey: string, nodeId: string, format: string, scale?: number): Promise<unknown>
   download(url: string): Promise<Uint8Array>
 }
@@ -100,6 +101,7 @@ export function createFigmaClient(options: FigmaClientOptions): FigmaClient {
   return {
     getFile: fileKey => request(`/files/${encodeURIComponent(fileKey)}`),
     getNode: (fileKey, nodeId) => request(`/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(normalizeNodeId(nodeId))}`),
+    getComments: fileKey => request(`/files/${encodeURIComponent(fileKey)}/comments`),
     render: (fileKey, nodeId, format, scale) => request(
       `/images/${encodeURIComponent(fileKey)}?ids=${encodeURIComponent(normalizeNodeId(nodeId))}&format=${encodeURIComponent(format)}`
       + (scale !== undefined ? `&scale=${scale}` : ''),
@@ -163,4 +165,48 @@ export function projectTree(raw: unknown, maxNodes = 2000): ProjectedTree {
     throw new Error('figma: response did not contain a readable node (expected { id, name, type })')
   }
   return { root, nodeCount, truncated }
+}
+
+/** One projected comment of a design file. */
+export interface FigmaCommentView {
+  id: string
+  /** The commenter's display handle. */
+  user: string
+  createdAt: string
+  message: string
+  /** Set when the comment is a reply to another comment. */
+  parentId?: string
+  /** Set when the comment has been resolved. */
+  resolvedAt?: string
+  /** The design node the comment anchors to (`client_meta.node_id`), when any. */
+  nodeId?: string
+}
+
+/**
+ * Condense the raw `/files/:key/comments` payload into model-readable rows:
+ * identity, commenter, timestamp, message, reply/resolved flags, and the
+ * anchored node id. Comment image attachments are not exposed by the Figma
+ * REST API, so none are projected.
+ * @param raw - the comments response (the wire boundary; malformed entries
+ * are skipped rather than thrown).
+ * @returns the projected comments.
+ */
+export function projectComments(raw: unknown): FigmaCommentView[] {
+  const list = Array.isArray(raw) ? raw
+    : isRecord(raw) && Array.isArray(raw.comments) ? raw.comments
+    : []
+  return list.flatMap((entry): FigmaCommentView[] => {
+    if (!isRecord(entry) || typeof entry.id !== 'string') return []
+    const user = isRecord(entry.user) && typeof entry.user.handle === 'string' ? entry.user.handle : ''
+    const clientMeta = isRecord(entry.client_meta) ? entry.client_meta : {}
+    return [{
+      id: entry.id,
+      user,
+      createdAt: typeof entry.created_at === 'string' ? entry.created_at : '',
+      message: typeof entry.message === 'string' ? entry.message : '',
+      ...(typeof entry.parent_id === 'string' && entry.parent_id !== '' ? { parentId: entry.parent_id } : {}),
+      ...(typeof entry.resolved_at === 'string' ? { resolvedAt: entry.resolved_at } : {}),
+      ...(typeof clientMeta.node_id === 'string' ? { nodeId: clientMeta.node_id } : {}),
+    }]
+  })
 }

@@ -5,6 +5,9 @@
  * - `figma_get_node` reads a Figma design file through the REST API and
  *   returns a condensed, model-readable node tree (identity, type, TEXT
  *   characters).
+ * - `figma_get_comments` reads the file's comments: commenter, timestamp,
+ *   message, reply/resolved flags, and the anchored node id (image
+ *   attachments are not exposed by the Figma API).
  * - `figma_render` renders a Figma node to an image, returning the signed URL
  *   and a local copy that the harness `read_image` tool can view.
  *
@@ -29,7 +32,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
-import { createFigmaClient, normalizeNodeId, projectTree, type FigmaClient } from './figma.ts'
+import { createFigmaClient, normalizeNodeId, projectComments, projectTree, type FigmaClient } from './figma.ts'
 
 export const name = 'mj-figma'
 
@@ -200,6 +203,62 @@ export function apply(ctx: Context, config: Config): void {
         // The registry projects the open `document` schema as Record<string, JsonValue>.
         document: projected.root as unknown as Record<string, JsonValue>,
       }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'figma_get_comments',
+    description: 'Read the comments of a Figma design file through the REST API: commenter, timestamp, message, reply/resolved flags, and the design node each comment anchors to. Comment image attachments are not exposed by the Figma API; use figma_render on the anchored nodeId to view the relevant design context.',
+    parameters: {
+      fileKey: {
+        type: 'string',
+        description: 'Figma file key; defaults to the configured figmaFileKey.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          fileKey: { type: 'string', required: true },
+          comments: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                id: { type: 'string', required: true },
+                user: { type: 'string', required: true },
+                createdAt: { type: 'string', required: true },
+                message: { type: 'string', required: true },
+                parentId: { type: 'string' },
+                resolvedAt: { type: 'string' },
+                nodeId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.comments.map(comment => {
+          const flags = [
+            comment.parentId !== undefined ? `reply-to ${comment.parentId}` : '',
+            comment.resolvedAt !== undefined ? 'resolved' : 'open',
+            comment.nodeId !== undefined ? `node ${comment.nodeId}` : '',
+          ].filter(Boolean).join(', ')
+          return `${comment.id} [${comment.user}, ${comment.createdAt}] (${flags}) ${comment.message}`
+        }).join('\n'),
+      }],
+    },
+    async execute(args) {
+      const fileKey = resolveFileKey(args.fileKey)
+      const client = await makeFigmaClient()
+      log(`figma_get_comments(fileKey=${fileKey})`)
+      const raw = await client.getComments(fileKey)
+      const comments = projectComments(raw)
+      return { fileKey, comments }
     },
   }))
 

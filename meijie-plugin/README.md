@@ -24,7 +24,7 @@ meijie-plugin/
 
 | 插件 | 目录 | 工具 | 说明 |
 | --- | --- | --- | --- |
-| mj-figma | `mj-figma/` | `figma_get_node` / `figma_render` | 通过 Figma REST API 读取设计稿内容 |
+| mj-figma | `mj-figma/` | `figma_get_node` / `figma_get_comments` / `figma_render` | 通过 Figma REST API 读取设计稿内容与评论 |
 | mj-cdp | `mj-cdp/` | `cdp_targets` / `cdp_evaluate` / `cdp_screenshot` / `cdp_console` | 通过 CDP 分析前端数据与效果；支持 chrome-launcher 指定 `chromePath` 自动启动浏览器，或连接已运行浏览器的调试端口 |
 
 ## 如何启动某个插件
