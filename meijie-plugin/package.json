@@ -5,6 +5,7 @@
   "description": "DeepSeek Harness plugin library (mj-* plugins).",
   "type": "module",
   "dependencies": {
+    "@dbx-app/mcp-server": "0.4.75",
     "chrome-launcher": "^1.1.0"
   }
 }

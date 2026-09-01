@@ -235,7 +235,12 @@ export function apply(ctx: Context, config: Config): void {
         : String(details.text ?? 'page exception')
       push({ type: 'exception', text: description })
     })
-    await session.send('Runtime.enable')
+    try {
+      await session.send('Runtime.enable')
+    } catch (error) {
+      session.close()
+      throw error
+    }
     consoleSessions.set(target.id, state)
     return state
   }

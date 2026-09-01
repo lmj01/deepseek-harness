@@ -1,0 +1,24 @@
+# mj-db Cordis 插件加载补丁。
+#
+# 启动：
+#   pnpm dsh web --patch ./meijie-plugin/mj-db/cordis.yml
+#
+# 请先在 DBX 的“设置 → MCP”中选择“只读”并设置连接 allowlist；数据库账号本身也应只读。
+- insert:
+  - id: mj-db
+    name: '/home/meiji/agents/deepseek-harness/meijie-plugin/mj-db/src/index.ts'
+    config:
+      serverName: dbx
+      # 可选：覆盖自动解析出的本地 DBX MCP 启动程序和工作目录。
+      # command: '/absolute/path/to/dbx-mcp-server'
+      # cwd: '/absolute/working/directory'
+      # 仅使用 Linux 原生文件系统目录。不要配置 /mnt/c、/mnt/d、/mnt/e 等
+      # Windows DrvFS/9P 路径，SQLite WAL/锁可能返回 disk I/O error。
+      dataDirectory: '/home/meiji/.local/share/com.dbx.app'
+      # 可选：进一步缩小 DBX 中已配置的连接 allowlist。ID scope 优先于名称 scope。
+      # connectionId: 'connection-id'
+      # connectionIds: 'connection-id-1,connection-id-2'
+      # connectionName: 'connection-name'
+      # database: 'database-name'
+      toolCallTimeoutMs: 60000
+      failOnStartupError: true

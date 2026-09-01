@@ -30,7 +30,7 @@ import { boot, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 // Loads the `tools` service declaration onto `ctx` (see dsh-tools' Context merge).
 import type {} from '@deepseek-ai/dsh-tools'
-import { CallId } from '@deepseek-ai/dsh-llm/brand'
+import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -146,8 +146,12 @@ async function startMockCdp(): Promise<{ port: number; close(): Promise<void> }>
         reply({ data: PNG_BASE64 })
       } else if (msg.method === 'Runtime.enable') {
         reply({})
-        emit('Runtime.consoleAPICalled', { type: 'log', args: [{ type: 'string', value: 'console says hi' }] })
-        emit('Runtime.exceptionThrown', { exceptionDetails: { text: 'Uncaught', exception: { description: 'TypeError: x is undefined' } } })
+        // Deliver buffered events in a later task, after the client has handled
+        // the Runtime.enable response and retained the console session.
+        setImmediate(() => {
+          emit('Runtime.consoleAPICalled', { type: 'log', args: [{ type: 'string', value: 'console says hi' }] })
+          emit('Runtime.exceptionThrown', { exceptionDetails: { text: 'Uncaught', exception: { description: 'TypeError: x is undefined' } } })
+        })
       } else {
         reply({})
       }
@@ -207,7 +211,7 @@ try {
     const signal = new AbortController().signal
     let callId = 0
     const run = (name: string, args: unknown) => tools.execute({
-      callId: CallId(`verify:${++callId}`),
+      callId: ToolCallId(`verify:${++callId}`),
       name,
       arguments: args,
       signal,
@@ -266,7 +270,7 @@ try {
     const ctx2 = await boot('dsh-verify', rootConfig2, [toolsPatch, ...patches2])
     try {
       const launchResult = await ctx2.tools.execute({
-        callId: CallId('verify:launch'),
+        callId: ToolCallId('verify:launch'),
         name: 'cdp_targets',
         arguments: {},
         signal: new AbortController().signal,

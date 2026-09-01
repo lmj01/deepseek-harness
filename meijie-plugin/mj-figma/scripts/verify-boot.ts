@@ -24,7 +24,7 @@ import { boot, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 // Loads the `tools` service declaration onto `ctx` (see dsh-tools' Context merge).
 import type {} from '@deepseek-ai/dsh-tools'
-import { CallId } from '@deepseek-ai/dsh-llm/brand'
+import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 
 const pluginDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const patchPath = join(pluginDir, 'cordis.yml')
@@ -74,7 +74,7 @@ try {
   const signal = new AbortController().signal
   let callId = 0
   const run = (name: string, args: unknown) => tools.execute({
-    callId: CallId(`verify:${++callId}`),
+    callId: ToolCallId(`verify:${++callId}`),
     name,
     arguments: args,
     signal,
