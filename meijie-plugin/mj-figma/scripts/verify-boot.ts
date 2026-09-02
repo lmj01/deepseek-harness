@@ -67,7 +67,10 @@ try {
 
   const tools = ctx.tools
   const schemas = tools.schemas()
-  for (const expected of ['figma_get_node', 'figma_get_comments', 'figma_render']) {
+  for (const expected of [
+    'figma_api_get', 'figma_list_projects', 'figma_get_components', 'figma_get_variables',
+    'figma_get_node', 'figma_get_comments', 'figma_render',
+  ]) {
     if (!schemas.some(schema => schema.name === expected)) fail(`${expected} tool not registered`)
   }
 
@@ -94,6 +97,33 @@ try {
         if (headers?.['X-Figma-Token'] !== 'figd_test-token') {
           fail(`figma API call missing X-Figma-Token header: ${url}`)
         }
+      }
+      if (init?.redirect !== 'error' && url.startsWith('https://api.figma.com/')) {
+        fail(`figma API call must reject redirects: ${url}`)
+      }
+      if (url === 'https://api.figma.com/v1/me') {
+        return Response.json({ id: 'user-1', handle: 'Agent User' })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc?depth=2') {
+        return Response.json({ name: 'Generic GET' })
+      }
+      if (url === 'https://api.figma.com/v1/teams/team-1/projects') {
+        return Response.json({ name: 'Team', projects: [{ id: 'project-1', name: 'Design system' }] })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc/components') {
+        return Response.json({ status: 200, error: false, meta: { components: [{ key: 'component-1' }] } })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc/component_sets') {
+        return Response.json({ status: 200, error: false, meta: { component_sets: [{ key: 'set-1' }] } })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc/styles') {
+        return Response.json({ status: 200, error: false, meta: { styles: [{ key: 'style-1' }] } })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc/variables/local') {
+        return Response.json({ status: 200, error: false, meta: { variables: { 'v:1': { name: 'Color' } }, variableCollections: {} } })
+      }
+      if (url === 'https://api.figma.com/v1/files/abc/variables/published') {
+        return Response.json({ status: 200, error: false, meta: { variables: { 'v:2': { name: 'Published color' } }, variableCollections: {} } })
       }
       if (url.includes('/nodes?ids=')) {
         // The dash→colon id normalization must reach the wire as 2%3A2.
@@ -146,6 +176,44 @@ try {
           { headers: { 'content-type': 'image/png' } })
       }
       throw new Error(`unexpected fetch: ${url}`)
+    }
+
+    const genericMe = await run('figma_api_get', { path: '/v1/me' })
+    const genericMeValue = genericMe.value as { id?: string }
+    if (genericMe.isError || genericMeValue.id !== 'user-1') {
+      fail(`figma_api_get /v1/me wrong: ${JSON.stringify(genericMe)}`)
+    }
+    const genericFile = await run('figma_api_get', { path: '/v1/files/abc', query: { depth: 2 } })
+    if (genericFile.isError || (genericFile.value as { name?: string }).name !== 'Generic GET') {
+      fail(`figma_api_get query wrong: ${JSON.stringify(genericFile)}`)
+    }
+    for (const path of [
+      'https://evil.example/v1/me', '//evil.example/v1/me', '/v1/files/../me',
+      '/v1/files/%2e%2e/me', '/v1/files/%252e%252e/me', '/v1/files/a%2Fb',
+      '/v1/me?secret=1', '/v1/developer_logs',
+    ]) {
+      const rejected = await run('figma_api_get', { path })
+      if (!rejected.isError) fail(`figma_api_get should reject ${path}`)
+    }
+    const unknownQuery = await run('figma_api_get', { path: '/v1/me', query: { limit: 1 } })
+    if (!unknownQuery.isError) fail('figma_api_get should reject undeclared query parameters')
+
+    const projects = await run('figma_list_projects', { teamId: 'team-1' })
+    if (projects.isError || (projects.value as { projects?: unknown[] }).projects?.length !== 1) {
+      fail(`figma_list_projects wrong: ${JSON.stringify(projects)}`)
+    }
+    const components = await run('figma_get_components', { fileKey: 'abc' })
+    const componentsValue = components.value as { components?: unknown; componentSets?: unknown; styles?: unknown }
+    if (components.isError || componentsValue.components === undefined || componentsValue.componentSets === undefined || componentsValue.styles === undefined) {
+      fail(`figma_get_components wrong: ${JSON.stringify(components)}`)
+    }
+    const localVariables = await run('figma_get_variables', { fileKey: 'abc' })
+    if (localVariables.isError || !JSON.stringify(localVariables.value).includes('Color')) {
+      fail(`figma_get_variables local wrong: ${JSON.stringify(localVariables)}`)
+    }
+    const publishedVariables = await run('figma_get_variables', { fileKey: 'abc', kind: 'published' })
+    if (publishedVariables.isError || !JSON.stringify(publishedVariables.value).includes('Published color')) {
+      fail(`figma_get_variables published wrong: ${JSON.stringify(publishedVariables)}`)
     }
 
     const file = await run('figma_get_node', { fileKey: 'abc' })
@@ -204,7 +272,7 @@ try {
     for (const path of renderedPath) await rm(path, { force: true })
   }
 
-  console.log('verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_get_comments/figma_render behave as configured')
+  console.log('verify-boot PASSED: mj-figma activated, OpenAPI GET safety and all seven Figma tools behave as configured')
 } finally {
   await ctx?.fiber.dispose()
   await rm(tempDir, { recursive: true, force: true })

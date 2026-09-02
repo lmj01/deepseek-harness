@@ -16,7 +16,7 @@
  */
 
 /** Root of the Figma REST API v1. */
-const FIGMA_API_BASE = 'https://api.figma.com/v1'
+const FIGMA_API_BASE = 'https://api.figma.com'
 
 /** One readable node of a projected Figma document tree. */
 export interface FigmaNodeView {
@@ -55,9 +55,15 @@ export class FigmaApiError extends Error {
 
 /** The REST surface the plugin tools use. */
 export interface FigmaClient {
+  get(path: string): Promise<unknown>
   getFile(fileKey: string): Promise<unknown>
   getNode(fileKey: string, nodeId: string): Promise<unknown>
   getComments(fileKey: string): Promise<unknown>
+  listProjects(teamId: string): Promise<unknown>
+  getFileComponents(fileKey: string): Promise<unknown>
+  getFileComponentSets(fileKey: string): Promise<unknown>
+  getFileStyles(fileKey: string): Promise<unknown>
+  getVariables(fileKey: string, kind: 'local' | 'published'): Promise<unknown>
   render(fileKey: string, nodeId: string, format: string, scale?: number): Promise<unknown>
   download(url: string): Promise<Uint8Array>
 }
@@ -91,6 +97,7 @@ export function createFigmaClient(options: FigmaClientOptions): FigmaClient {
   const request = async (path: string): Promise<unknown> => {
     const response = await fetchImpl(`${FIGMA_API_BASE}${path}`, {
       headers: authHeaders,
+      redirect: 'error',
     })
     if (!response.ok) {
       const body = await response.text().catch(() => '')
@@ -99,11 +106,17 @@ export function createFigmaClient(options: FigmaClientOptions): FigmaClient {
     return response.json()
   }
   return {
-    getFile: fileKey => request(`/files/${encodeURIComponent(fileKey)}`),
-    getNode: (fileKey, nodeId) => request(`/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(normalizeNodeId(nodeId))}`),
-    getComments: fileKey => request(`/files/${encodeURIComponent(fileKey)}/comments`),
+    get: path => request(path),
+    getFile: fileKey => request(`/v1/files/${encodeURIComponent(fileKey)}`),
+    getNode: (fileKey, nodeId) => request(`/v1/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(normalizeNodeId(nodeId))}`),
+    getComments: fileKey => request(`/v1/files/${encodeURIComponent(fileKey)}/comments`),
+    listProjects: teamId => request(`/v1/teams/${encodeURIComponent(teamId)}/projects`),
+    getFileComponents: fileKey => request(`/v1/files/${encodeURIComponent(fileKey)}/components`),
+    getFileComponentSets: fileKey => request(`/v1/files/${encodeURIComponent(fileKey)}/component_sets`),
+    getFileStyles: fileKey => request(`/v1/files/${encodeURIComponent(fileKey)}/styles`),
+    getVariables: (fileKey, kind) => request(`/v1/files/${encodeURIComponent(fileKey)}/variables/${kind}`),
     render: (fileKey, nodeId, format, scale) => request(
-      `/images/${encodeURIComponent(fileKey)}?ids=${encodeURIComponent(normalizeNodeId(nodeId))}&format=${encodeURIComponent(format)}`
+      `/v1/images/${encodeURIComponent(fileKey)}?ids=${encodeURIComponent(normalizeNodeId(nodeId))}&format=${encodeURIComponent(format)}`
       + (scale !== undefined ? `&scale=${scale}` : ''),
     ),
     async download(url) {

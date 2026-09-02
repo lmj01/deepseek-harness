@@ -17,10 +17,14 @@ meijie-plugin/mj-figma/
 
 ## 插件做什么
 
-加载后注册三个工具：
+加载后注册七个只读工具：
 
 | 工具 | 行为 |
 | --- | --- |
+| `figma_api_get` | 调用官方 OpenAPI `0.42.0` 中列出的 GET 操作；固定 Figma 官方域名并拒绝未知路径、绝对 URL、重定向、路径穿越、写请求和未声明的查询参数 |
+| `figma_list_projects` | 按 team id 列出项目；底层 `/v1/teams/:team_id/projects` 已被 Figma 标记为 deprecated，新应用可通过 `figma_api_get` 使用 v2 folders API |
+| `figma_get_components` | 并行读取主文件发布的 components、component sets 和 styles |
+| `figma_get_variables` | 读取文件的 local 或 published variables；需要 Enterprise full member 和 `file_variables:read` |
 | `figma_get_node` | 通过 Figma REST API 读取设计稿（整个文件或单个节点），返回压缩后的模型可读节点树：id / name / type / TEXT 文本 |
 | `figma_get_comments` | 读取设计稿评论：评论人 / 时间 / 文本 / 回复与已解决标记 / 评论锚定的节点 id（Figma API 不暴露评论里的图片，想看对应视觉用 `figma_render` 渲染锚定节点） |
 | `figma_render` | 把 Figma 节点渲染成图片（png / jpg / svg），返回签名 URL 并下载到本地，配合 harness 的 `read_image` 工具即可让模型真正“看到”设计稿 |
@@ -52,6 +56,10 @@ meijie-plugin/mj-figma/
 ### 用法示例（在 Web GUI 里对 agent 说）
 
 - “用 figma_get_node 读文件 `<fileKey>`，列出所有页面和文本”
+- “读取 team `<teamId>` 的项目列表”
+- “读取文件 `<fileKey>` 发布的组件、组件集和样式”
+- “读取文件 `<fileKey>` 的本地 Variables”
+- “用 figma_api_get 调用 `/v1/me`”
 - “把 `<fileKey>` 的节点 `1:2` 渲染成 png，然后用 read_image 看一下”
 
 ## 如何启动
@@ -105,7 +113,7 @@ pnpm dsh web --dump-config --patch ./meijie-plugin/mj-figma/cordis.yml
 
 ```sh
 node --import tsx/esm meijie-plugin/mj-figma/scripts/verify-boot.ts
-# 期望输出: verify-boot PASSED: mj-figma activated, tools figma_get_node/figma_get_comments/figma_render behave as configured
+# 期望输出: verify-boot PASSED: mj-figma activated, OpenAPI GET safety and all seven Figma tools behave as configured
 ```
 
 ## 工作原理（为什么这样能跑起来）

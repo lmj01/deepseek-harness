@@ -2,6 +2,10 @@
  * mj-figma — a Harness plugin that reads Figma design files through the
  * Figma REST API and exercises its own configuration.
  *
+ * - `figma_api_get` exposes the GET operations in the reviewed Figma OpenAPI
+ *   specification through a path and query allowlist.
+ * - `figma_list_projects`, `figma_get_components`, and `figma_get_variables`
+ *   provide focused project, library asset, and variable reads.
  * - `figma_get_node` reads a Figma design file through the REST API and
  *   returns a condensed, model-readable node tree (identity, type, TEXT
  *   characters).
@@ -33,6 +37,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { createFigmaClient, normalizeNodeId, projectComments, projectTree, type FigmaClient } from './figma.ts'
+import { authorizeFigmaGet, type FigmaQueryValue } from './openapi-get.ts'
 
 export const name = 'mj-figma'
 
@@ -130,6 +135,105 @@ export function apply(ctx: Context, config: Config): void {
     await writeFile(localPath, bytes)
     return localPath
   }
+
+  ctx.tools.register(defineTool({
+    name: 'figma_api_get',
+    description: 'Call one read-only Figma REST endpoint allowed by the pinned official OpenAPI GET list. Pass a substituted path such as /v1/me and query parameters separately. Absolute URLs, unknown paths, write methods, traversal, redirects, custom headers, and request bodies are rejected.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Substituted Figma API path beginning with /v1 or /v2; no origin, query string, fragment, or template braces.' },
+      query: {
+        type: 'object',
+        additionalProperties: true,
+        description: 'Query parameters allowed by the matched OpenAPI GET operation. Values must be strings, numbers, or booleans.',
+      },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      if (typeof args.path !== 'string') throw new Error('figma: path must be a string')
+      const rawQuery = args.query ?? {}
+      if (typeof rawQuery !== 'object' || rawQuery === null || Array.isArray(rawQuery)) {
+        throw new Error('figma: query must be an object')
+      }
+      const query: Record<string, FigmaQueryValue> = {}
+      for (const [key, value] of Object.entries(rawQuery)) {
+        if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+          throw new Error(`figma: query parameter ${key} must be a string, number, or boolean`)
+        }
+        query[key] = value
+      }
+      const path = authorizeFigmaGet(args.path, query)
+      const client = await makeFigmaClient()
+      log(`figma_api_get(path=${path})`)
+      const value = await client.get(path)
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error(`figma: expected an object response for ${path}`)
+      }
+      return value as Record<string, JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'figma_list_projects',
+    description: 'List projects visible to the authenticated user in one Figma team. This wraps the deprecated GET /v1/teams/:team_id/projects endpoint; newer deployments should prefer the /v2 folders endpoints through figma_api_get.',
+    parameters: {
+      teamId: { type: 'string', required: true, description: 'Figma team id from the team URL.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const client = await makeFigmaClient()
+      log(`figma_list_projects(teamId=${args.teamId})`)
+      return await client.listProjects(args.teamId) as Record<string, JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'figma_get_components',
+    description: 'Read the published components, component sets, and styles from one main Figma file.',
+    parameters: {
+      fileKey: { type: 'string', description: 'Main Figma file key; defaults to the configured figmaFileKey.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const fileKey = resolveFileKey(args.fileKey)
+      const client = await makeFigmaClient()
+      log(`figma_get_components(fileKey=${fileKey})`)
+      const [components, componentSets, styles] = await Promise.all([
+        client.getFileComponents(fileKey),
+        client.getFileComponentSets(fileKey),
+        client.getFileStyles(fileKey),
+      ])
+      return { fileKey, components, componentSets, styles } as Record<string, JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'figma_get_variables',
+    description: 'Read local or published variables from a Figma file. Figma restricts this API to Enterprise full members and requires file_variables:read.',
+    parameters: {
+      fileKey: { type: 'string', description: 'Figma file key; defaults to the configured figmaFileKey.' },
+      kind: { type: 'string', enum: ['local', 'published'] as const, description: 'Variable collection to read; defaults to local.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const fileKey = resolveFileKey(args.fileKey)
+      const kind = args.kind ?? 'local'
+      const client = await makeFigmaClient()
+      log(`figma_get_variables(fileKey=${fileKey}, kind=${kind})`)
+      return await client.getVariables(fileKey, kind) as Record<string, JsonValue>
+    },
+  }))
 
   ctx.tools.register(defineTool({
     name: 'figma_get_node',
