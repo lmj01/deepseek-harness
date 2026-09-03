@@ -36,6 +36,7 @@ meijie-plugin/mj-figma/
 | `verbose` | `false` | 为 `true` 时每次工具调用打印一行日志 |
 | `figmaToken` | — | Figma 令牌备用字段；优先级：`FIGMA_TOKEN` 凭据 > 环境变量 > 此字段 |
 | `figmaFileKey` | — | 默认 Figma 文件 key，工具调用可省略 `fileKey` 参数 |
+| `figmaTeamId` | — | 默认 Figma 团队 id，`figma_list_projects` 可省略 `teamId` 参数 |
 | `figmaOutputDir` | `os.tmpdir()/mj-figma` | `figma_render` 图片下载目录 |
 | `figmaMaxNodes` | `2000` | `figma_get_node` 遍历节点数上限（超出置 `truncated`） |
 

@@ -40,4 +40,3 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
-meijie-plugin/cordis.yml

@@ -17,6 +17,7 @@
       verbose: false
       # figmaToken: 'figd_xxx'
       # figmaFileKey: '<figma-file-key>'
+      # figmaTeamId: '<figma-team-id>'
       # figmaOutputDir: '/tmp/mj-figma'
       # figmaMaxNodes: 2000
 

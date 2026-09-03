@@ -15,5 +15,6 @@
       # 令牌优先级：FIGMA_TOKEN 凭据（~/.dsh/.credentials.yaml / 环境变量）> 此处 figmaToken。
       # figmaToken: 'figd_xxx'
       # figmaFileKey: 'xxxxxxxxxxxx'        # 默认文件 key，工具调用可省略 fileKey
+      # figmaTeamId: 'xxxxxxxxxxxx'         # 默认团队 id，figma_list_projects 可省略 teamId
       # figmaOutputDir: '/tmp/mj-figma'     # 渲染图片下载目录（默认 os.tmpdir()/mj-figma）
       # figmaMaxNodes: 2000                 # figma_get_node 遍历节点数上限

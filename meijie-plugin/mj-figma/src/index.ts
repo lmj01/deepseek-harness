@@ -50,6 +50,8 @@ export interface Config {
   figmaToken?: string
   /** Default Figma file key when a Figma tool call omits `fileKey`. */
   figmaFileKey?: string
+  /** Default Figma team id when `figma_list_projects` omits `teamId`. */
+  figmaTeamId?: string
   /** Directory `figma_render` downloads images into (default: os.tmpdir()/mj-figma). */
   figmaOutputDir?: string
   /** Node-visit cap for `figma_get_node` document projection. */
@@ -60,6 +62,7 @@ export const Config: Schema<Config> = Schema.object({
   verbose: Schema.boolean().default(false),
   figmaToken: Schema.string(),
   figmaFileKey: Schema.string(),
+  figmaTeamId: Schema.string(),
   figmaOutputDir: Schema.string(),
   figmaMaxNodes: Schema.number().default(2000),
 })
@@ -179,16 +182,20 @@ export function apply(ctx: Context, config: Config): void {
     name: 'figma_list_projects',
     description: 'List projects visible to the authenticated user in one Figma team. This wraps the deprecated GET /v1/teams/:team_id/projects endpoint; newer deployments should prefer the /v2 folders endpoints through figma_api_get.',
     parameters: {
-      teamId: { type: 'string', required: true, description: 'Figma team id from the team URL.' },
+      teamId: { type: 'string', description: 'Figma team id from the team URL; defaults to the configured figmaTeamId.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
+      const teamId = args.teamId ?? config.figmaTeamId
+      if (teamId === undefined) {
+        throw new Error('figma: no team id — pass teamId or set config figmaTeamId')
+      }
       const client = await makeFigmaClient()
-      log(`figma_list_projects(teamId=${args.teamId})`)
-      return await client.listProjects(args.teamId) as Record<string, JsonValue>
+      log(`figma_list_projects(teamId=${teamId})`)
+      return await client.listProjects(teamId) as Record<string, JsonValue>
     },
   }))
 
