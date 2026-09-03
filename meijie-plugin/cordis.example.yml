@@ -1,0 +1,53 @@
+# meijie-plugin 统一加载补丁。
+#
+# 包含当前所有 mj-* 插件配置。各插件的详细配置仍由对应目录中的
+# cordis.yml 维护；新增插件后需同步更新本文件。
+#
+# 启动：
+#   cd <workspace>
+#   cp ./meijie-plugin/cordis.example.yml ./meijie-plugin/cordis.yml
+#   # 将下方 <workspace>、<figma-file-key>、<linux-home> 等占位符替换为本机值。
+#   pnpm dsh web --no-open --patch ./meijie-plugin/cordis.yml
+
+# mj-figma
+- insert:
+  - id: mj-figma
+    name: '<workspace>/meijie-plugin/mj-figma/src/index.ts'
+    config:
+      verbose: false
+      # figmaToken: 'figd_xxx'
+      # figmaFileKey: '<figma-file-key>'
+      # figmaOutputDir: '/tmp/mj-figma'
+      # figmaMaxNodes: 2000
+
+# mj-cdp
+- insert:
+  - id: mj-cdp
+    name: '<workspace>/meijie-plugin/mj-cdp/src/index.ts'
+    # 默认保持禁用，避免统一启动时自动拉起或连接 Chrome。
+    disabled: true
+    config:
+      # chromePath: '<chrome-executable-path>'
+      # userDataDir: '<chrome-user-data-directory>'
+      # chromePort: 0
+      # headless: true
+      # launchOnLoad: true
+      # cdpEndpoint: 'http://127.0.0.1:9222'
+      # cdpOutputDir: '/tmp/mj-cdp'
+      # maxConsoleEntries: 200
+      # verbose: true
+
+# mj-db
+- insert:
+  - id: mj-db
+    name: '<workspace>/meijie-plugin/mj-db/src/index.ts'
+    config:
+      serverName: dbx
+      # 只使用 Linux 原生文件系统；不要指向 /mnt/c、/mnt/d、/mnt/e。
+      dataDirectory: '<linux-home>/.local/share/com.dbx.app'
+      # connectionId: 'connection-id'
+      # connectionIds: 'connection-id-1,connection-id-2'
+      # connectionName: 'connection-name'
+      # database: 'database-name'
+      toolCallTimeoutMs: 60000
+      failOnStartupError: true

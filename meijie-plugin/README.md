@@ -37,7 +37,13 @@ meijie-plugin/
 
 前提：deepseek-harness 仓库已 `pnpm install`；启动走 tsx 源码解析，运行时不需要额外构建（只有 `tsc` 类型检查需要 `pnpm run build:lib` 产出的 `lib/types`）。插件库自身的依赖（mj-cdp 使用的 `chrome-launcher`、mj-db 使用的 `@dbx-app/mcp-server`）在 `meijie-plugin/package.json` 声明，首次使用前执行一次 `cd meijie-plugin && npm install`。
 
-统一加载当前所有插件时，使用插件库根目录的 `cordis.yml`：
+统一加载当前所有插件时，使用插件库根目录的 `cordis.yml`。`cordis.example.yml` 是同结构的脱敏模板，可复制后将 `<workspace>`、`<figma-file-key>` 和 `<linux-home>` 等占位符替换为本机值；不要把令牌、数据库密码或真实业务标识提交到模板。
+
+```sh
+cp ./meijie-plugin/cordis.example.yml ./meijie-plugin/cordis.yml
+```
+
+配置完成后启动：
 
 ```sh
 cd /home/meiji/agents/deepseek-harness
