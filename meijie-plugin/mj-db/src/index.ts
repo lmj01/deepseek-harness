@@ -61,33 +61,41 @@ export const Config: Schema<Config> = Schema.object({
  * @returns Startup readiness after DBX MCP tool discovery completes.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  if (process.platform !== 'linux') return
-
-  const env: Record<string, string> = {
-    // This only preserves read-only behavior before a central DBX MCP policy is
-    // saved. The DBX policy and database credentials remain authoritative.
-    DBX_MCP_ALLOW_WRITES: '0',
+  if (process.platform !== 'linux') {
+    console.log('[mj-db] plugin loaded (skipped: Linux only)')
+    return
   }
-  if (config.dataDirectory !== undefined) env.DBX_DATA_DIR = config.dataDirectory
-  if (config.connectionId !== undefined) env.DBX_MCP_SCOPE_CONNECTION_ID = config.connectionId
-  if (config.connectionIds !== undefined) env.DBX_MCP_SCOPE_CONNECTION_IDS = config.connectionIds
-  if (config.connectionName !== undefined) env.DBX_MCP_SCOPE_CONNECTION_NAME = config.connectionName
-  if (config.database !== undefined) env.DBX_MCP_SCOPE_DATABASE = config.database
 
-  await ctx.plugin(McpClient, {
-    serverName: config.serverName ?? 'dbx',
-    transport: 'stdio',
-    command: config.command ?? defaultCommand,
-    args: [],
-    env,
-    cwd: config.cwd ?? defaultWorkingDirectory,
-    toolCallTimeoutMs: config.toolCallTimeoutMs ?? 60_000,
-    failOnStartupError: config.failOnStartupError ?? true,
-    reconnect: {
-      enabled: true,
-      initialDelayMs: 500,
-      maxDelayMs: 30_000,
-      maxAttempts: 10,
-    },
-  })
+  try {
+    const env: Record<string, string> = {
+      // This only preserves read-only behavior before a central DBX MCP policy is
+      // saved. The DBX policy and database credentials remain authoritative.
+      DBX_MCP_ALLOW_WRITES: '0',
+    }
+    if (config.dataDirectory !== undefined) env.DBX_DATA_DIR = config.dataDirectory
+    if (config.connectionId !== undefined) env.DBX_MCP_SCOPE_CONNECTION_ID = config.connectionId
+    if (config.connectionIds !== undefined) env.DBX_MCP_SCOPE_CONNECTION_IDS = config.connectionIds
+    if (config.connectionName !== undefined) env.DBX_MCP_SCOPE_CONNECTION_NAME = config.connectionName
+    if (config.database !== undefined) env.DBX_MCP_SCOPE_DATABASE = config.database
+
+    await ctx.plugin(McpClient, {
+      serverName: config.serverName ?? 'dbx',
+      transport: 'stdio',
+      command: config.command ?? defaultCommand,
+      args: [],
+      env,
+      cwd: config.cwd ?? defaultWorkingDirectory,
+      toolCallTimeoutMs: config.toolCallTimeoutMs ?? 60_000,
+      failOnStartupError: config.failOnStartupError ?? true,
+      reconnect: {
+        enabled: true,
+        initialDelayMs: 500,
+        maxDelayMs: 30_000,
+        maxAttempts: 10,
+      },
+    })
+    console.log('[mj-db] plugin loaded (serverName=dbx)')
+  } catch (error) {
+    console.error(`[mj-db] plugin failed to load: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }

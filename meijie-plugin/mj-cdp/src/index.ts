@@ -82,7 +82,7 @@ interface ConsoleSession {
   entries: Array<{ type: string; text: string }>
 }
 
-export function apply(ctx: Context, config: Config): void {
+function mount(ctx: Context, config: Config): void {
   const log = (message: string): void => {
     if (config.verbose) console.log(`[mj-cdp] ${message}`)
   }
@@ -445,4 +445,18 @@ export function apply(ctx: Context, config: Config): void {
       }
     },
   }))
+}
+
+/**
+ * Loads the mj-cdp plugin without letting a mount failure abort the harness
+ * plugin tree. A failure is reported to stderr and the plugin registers nothing.
+ * @param ctx Cordis context carrying the tool registry.
+ * @param config Resolved CDP configuration.
+ */
+export function apply(ctx: Context, config: Config): void {
+  try {
+    mount(ctx, config)
+  } catch (error) {
+    console.error(`[mj-cdp] plugin failed to load: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }

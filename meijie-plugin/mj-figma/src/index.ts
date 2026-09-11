@@ -67,7 +67,7 @@ export const Config: Schema<Config> = Schema.object({
   figmaMaxNodes: Schema.number().default(2000),
 })
 
-export function apply(ctx: Context, config: Config): void {
+function mount(ctx: Context, config: Config): void {
   const log = (message: string): void => {
     if (config.verbose) console.log(`[mj-figma] ${message}`)
   }
@@ -416,4 +416,18 @@ export function apply(ctx: Context, config: Config): void {
       return { url, localPath, format }
     },
   }))
+}
+
+/**
+ * Loads the mj-figma plugin without letting a mount failure abort the harness
+ * plugin tree. A failure is reported to stderr and the plugin registers nothing.
+ * @param ctx Cordis context carrying the tool registry.
+ * @param config Resolved Figma configuration.
+ */
+export function apply(ctx: Context, config: Config): void {
+  try {
+    mount(ctx, config)
+  } catch (error) {
+    console.error(`[mj-figma] plugin failed to load: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
