@@ -139,19 +139,35 @@ async function startMockCdp(): Promise<{ port: number; close(): Promise<void> }>
           reply({ exceptionDetails: { text: 'Uncaught', exception: { description: 'Error: boom' } } })
         } else if (expression.includes('JSON.stringify')) {
           reply({ result: { type: 'object', value: { count: 3, name: 'demo' } } })
+        } else if (expression.includes('location.href')) {
+          // cdp_interact navigate: read the post-navigation page state.
+          reply({ result: { type: 'object', value: { title: 'Interact Page', url: 'https://example.com/interact', readyState: 'complete' } } })
+        } else if (expression.includes('.click()')) {
+          reply({ result: { type: 'object', value: { found: true } } })
+        } else if (expression.includes('dispatchEvent')) {
+          reply({ result: { type: 'object', value: { found: true } } })
+        } else if (expression.includes('!!document.querySelector')) {
+          reply({ result: { type: 'boolean', value: true } })
+        } else if (expression.includes('scrollIntoView')) {
+          reply({ result: { type: 'undefined' } })
+        } else if (expression.includes('scrollTo')) {
+          reply({ result: { type: 'undefined' } })
+        } else if (expression.includes('innerText')) {
+          reply({ result: { type: 'string', value: 'Interact content' } })
         } else {
           reply({ result: { type: 'string', value: 'Hello CDP' } })
         }
+      } else if (msg.method === 'Page.navigate') {
+        reply({ frameId: 'frame-1', loaderId: 'loader-1' })
+        emit('Page.loadEventFired', { frameId: 'frame-1' })
       } else if (msg.method === 'Page.captureScreenshot') {
         reply({ data: PNG_BASE64 })
       } else if (msg.method === 'Runtime.enable') {
         reply({})
-        // Deliver buffered events in a later task, after the client has handled
-        // the Runtime.enable response and retained the console session.
-        setImmediate(() => {
-          emit('Runtime.consoleAPICalled', { type: 'log', args: [{ type: 'string', value: 'console says hi' }] })
-          emit('Runtime.exceptionThrown', { exceptionDetails: { text: 'Uncaught', exception: { description: 'TypeError: x is undefined' } } })
-        })
+        // Emit buffered console events synchronously after the enable response,
+        // mirroring a browser that replays buffered events on enable.
+        emit('Runtime.consoleAPICalled', { type: 'log', args: [{ type: 'string', value: 'console says hi' }] })
+        emit('Runtime.exceptionThrown', { exceptionDetails: { text: 'Uncaught', exception: { description: 'TypeError: x is undefined' } } })
       } else {
         reply({})
       }
@@ -204,7 +220,7 @@ try {
     if (entry === undefined || entry.fiber === undefined) fail('mj-cdp entry did not activate')
 
     const tools = ctx.tools
-    for (const expected of ['cdp_targets', 'cdp_evaluate', 'cdp_screenshot', 'cdp_console']) {
+    for (const expected of ['cdp_targets', 'cdp_evaluate', 'cdp_interact', 'cdp_screenshot', 'cdp_console']) {
       if (!tools.schemas().some(schema => schema.name === expected)) fail(`${expected} tool not registered`)
     }
 
@@ -238,6 +254,35 @@ try {
       fail(`cdp_evaluate should surface the exception, got ${JSON.stringify(thrown)}`)
     }
 
+    const navigated = await run('cdp_interact', { action: 'navigate', url: 'https://example.com/interact', endpoint: `http://127.0.0.1:${mock.port}` })
+    const navigatedValue = navigated.value as { title?: string; url?: string; readyState?: string }
+    if (navigated.isError || navigatedValue.title !== 'Interact Page' || navigatedValue.url !== 'https://example.com/interact' || navigatedValue.readyState !== 'complete') {
+      fail(`cdp_interact navigate wrong: ${JSON.stringify(navigated)}`)
+    }
+
+    const clicked = await run('cdp_interact', { action: 'click', selector: '.button', endpoint: `http://127.0.0.1:${mock.port}` })
+    if (clicked.isError || (clicked.value as { found?: boolean }).found !== true) {
+      fail(`cdp_interact click wrong: ${JSON.stringify(clicked)}`)
+    }
+
+    const typed = await run('cdp_interact', { action: 'type', selector: 'input', text: 'hello', endpoint: `http://127.0.0.1:${mock.port}` })
+    if (typed.isError || (typed.value as { found?: boolean }).found !== true) {
+      fail(`cdp_interact type wrong: ${JSON.stringify(typed)}`)
+    }
+
+    const waited = await run('cdp_interact', { action: 'wait', selector: '.loaded', endpoint: `http://127.0.0.1:${mock.port}` })
+    if (waited.isError || (waited.value as { found?: boolean }).found !== true) {
+      fail(`cdp_interact wait wrong: ${JSON.stringify(waited)}`)
+    }
+
+    const scrolled = await run('cdp_interact', { action: 'scroll', endpoint: `http://127.0.0.1:${mock.port}` })
+    if (scrolled.isError) fail(`cdp_interact scroll wrong: ${JSON.stringify(scrolled)}`)
+
+    const readResult = await run('cdp_interact', { action: 'read', endpoint: `http://127.0.0.1:${mock.port}` })
+    if (readResult.isError || (readResult.value as { text?: string }).text !== 'Interact content') {
+      fail(`cdp_interact read wrong: ${JSON.stringify(readResult)}`)
+    }
+
     const shot = await run('cdp_screenshot', { endpoint: `http://127.0.0.1:${mock.port}` })
     const shotValue = shot.value as { localPath: string; format: string; bytes: number }
     if (shot.isError || shotValue.format !== 'png') fail(`cdp_screenshot wrong: ${JSON.stringify(shot)}`)
@@ -247,6 +292,10 @@ try {
       fail(`cdp_screenshot bytes wrong: ${written.length} vs ${expected.length}`)
     }
 
+    // Attach the console session (enable + register listeners), then let the
+    // buffered events arrive before reading the accumulated buffer.
+    await run('cdp_console', { endpoint: `http://127.0.0.1:${mock.port}` })
+    await new Promise(resolve => setTimeout(resolve, 50))
     const consoleResult = await run('cdp_console', { endpoint: `http://127.0.0.1:${mock.port}` })
     const consoleValue = consoleResult.value as { entries: Array<{ type: string; text: string }> }
     if (consoleResult.isError
@@ -282,7 +331,7 @@ try {
       await ctx2.fiber.dispose()
     }
 
-    console.log(`verify-boot PASSED: mj-cdp activated, cdp_targets/cdp_evaluate/cdp_screenshot/cdp_console work against the real WebSocket transport (mock endpoint :${mock.port}), and the chromePath launch path fails loud on a bad binary`)
+    console.log(`verify-boot PASSED: mj-cdp activated, cdp_targets/cdp_evaluate/cdp_interact/cdp_screenshot/cdp_console work against the real WebSocket transport (mock endpoint :${mock.port}), and the chromePath launch path fails loud on a bad binary`)
   } finally {
     // Close the console sessions first (plugin dispose), then the mock server;
     // server.close() waits for open sockets.

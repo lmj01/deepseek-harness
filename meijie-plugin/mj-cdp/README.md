@@ -8,7 +8,7 @@ DeepSeek Harness（dsh）插件库 `meijie-plugin/mj-cdp`：通过 **Chrome DevT
 meijie-plugin/mj-cdp/
 ├── cordis.yml              # 本插件的加载补丁（loader patch overlay），启动时注入插件行
 ├── src/
-│   ├── index.ts            # 插件入口：4 个工具 + 控制台会话管理
+│   ├── index.ts            # 插件入口：5 个工具 + 控制台会话管理
 │   └── cdp.ts              # CDP 客户端（HTTP 目标发现 + WebSocket 会话，传输可注入）
 ├── scripts/
 │   └── verify-boot.ts      # 端到端验证（内置真实 WebSocket mock CDP 服务）
@@ -21,10 +21,11 @@ meijie-plugin/mj-cdp/
 | --- | --- |
 | `cdp_targets` | 列出浏览器所有标签页（id / 标题 / URL / 类型），用于选目标 |
 | `cdp_evaluate` | 在页面里执行 JavaScript 并取回返回值（页面状态、DOM 查询、前端持有的数据）；表达式抛错会作为工具错误返回 |
+| `cdp_interact` | 封装好的页面交互：`navigate`（导航到 URL 并等待加载）、`click`（点击元素）、`type`（向输入框写入文本）、`wait`（等待元素出现或固定时长）、`scroll`（滚动）、`read`（读取元素或整页文本）。优先用它做常规交互，任意 JS 用 `cdp_evaluate` |
 | `cdp_screenshot` | 截取页面视觉输出（png / jpeg），保存到本地，配合 harness 的 `read_image` 让模型直接"看到"页面效果 |
 | `cdp_console` | 附加到页面，返回自首次调用以来缓冲的控制台日志与页面异常（上限 `maxConsoleEntries`） |
 
-全部通过 CDP 的 `Runtime.evaluate` / `Page.captureScreenshot` / `Runtime.enable` 实现，Node 22 内置 WebSocket，**无新增依赖**。
+全部通过 CDP 的 `Runtime.evaluate` / `Page.navigate` / `Page.captureScreenshot` / `Runtime.enable` 实现，Node 22 内置 WebSocket，**无新增依赖**。
 
 ## 前置条件
 

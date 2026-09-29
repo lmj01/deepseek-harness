@@ -7,7 +7,7 @@
 #   cd <workspace>
 #   cp ./meijie-plugin/cordis.example.yml ./meijie-plugin/cordis.yml
 #   # 将下方 <workspace>、<figma-file-key>、<linux-home> 等占位符替换为本机值。
-#   pnpm dsh web --no-open --patch ./meijie-plugin/cordis.yml
+#   pnpm dsh web --patch ./meijie-plugin/cordis.yml --no-open
 
 # mj-figma
 - insert:

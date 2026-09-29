@@ -10,6 +10,8 @@
  * - `cdp_targets` — list the browser's tabs (title, url, type).
  * - `cdp_evaluate` — run JavaScript in a page and read the returned value
  *   (page state, DOM queries, network-derived data).
+ * - `cdp_interact` — high-level page interactions (navigate, click, type,
+ *   wait, scroll, read) built over `Runtime.evaluate` and `Page.navigate`.
  * - `cdp_screenshot` — capture a page's visual output as png/jpeg, saved
  *   locally so the harness `read_image` tool can view it.
  * - `cdp_console` — read console logs and page exceptions buffered since the
@@ -245,6 +247,46 @@ function mount(ctx: Context, config: Config): void {
     return state
   }
 
+  /**
+   * Evaluate one JavaScript expression in a page and return its value.
+   * @param session - the page CDP session.
+   * @param expression - the expression to evaluate.
+   * @returns the value produced (`undefined` when the expression returns `undefined`).
+   */
+  const evaluateJson = async (session: CdpSession, expression: string): Promise<unknown> => {
+    const result = await session.send('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    }) as Record<string, unknown>
+    if (isRecord(result.exceptionDetails)) {
+      const details = result.exceptionDetails
+      const description = isRecord(details.exception) && typeof details.exception.description === 'string'
+        ? details.exception.description
+        : String(details.text ?? 'expression threw')
+      throw new Error(`cdp_interact: ${description}`)
+    }
+    const inner = isRecord(result.result) ? result.result : {}
+    return inner.value
+  }
+
+  /**
+   * Wait for one CDP event with a timeout.
+   * @param session - the page CDP session.
+   * @param event - the protocol event name.
+   * @param timeoutMs - reject after this many milliseconds.
+   * @returns resolves when the event fires, rejects on timeout.
+   */
+  const waitForEvent = (session: CdpSession, event: string, timeoutMs: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`cdp_interact: timed out waiting for ${event}`)), timeoutMs)
+      session.on(event, () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+  }
+
   ctx.tools.register(defineTool({
     name: 'cdp_targets',
     description: `List the tabs of the browser connected through the CDP endpoint (${config.cdpEndpoint ?? 'http://127.0.0.1:9222'}): id, title, url, and type for every target. Use the ids to inspect a specific tab with cdp_evaluate / cdp_screenshot / cdp_console.`,
@@ -344,6 +386,128 @@ function mount(ctx: Context, config: Config): void {
           json = String(value)
         }
         return { targetId: target.id, title: target.title, url: target.url, type: String(inner.type ?? 'unknown'), json }
+      } finally {
+        session.close()
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'cdp_interact',
+    description: 'Perform one high-level interaction in a browser page through CDP: navigate to a URL, click an element, type text into an input, wait for an element or a fixed duration, scroll, or read an element/whole-page text. Prefer this over raw cdp_evaluate for common interactions; use cdp_evaluate for arbitrary JavaScript.',
+    parameters: {
+      action: {
+        type: 'string',
+        required: true,
+        enum: ['navigate', 'click', 'type', 'wait', 'scroll', 'read'],
+        description: 'Interaction to perform.',
+      },
+      url: { type: 'string', description: 'URL to navigate to (action=navigate).' },
+      selector: { type: 'string', description: 'CSS selector for the target element (actions click/type/read; optional for wait/scroll).' },
+      text: { type: 'string', description: 'Text to type (action=type).' },
+      duration: { type: 'number', description: 'Milliseconds to wait (action=wait without selector; also the wait timeout for wait with selector, default 10000).' },
+      targetId: { type: 'string', description: 'Target id from cdp_targets; defaults to the first page tab.' },
+      endpoint: { type: 'string', description: 'CDP endpoint override; defaults to the configured cdpEndpoint.' },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args) {
+      const action = args.action
+      const endpoint = await resolveEndpoint(args.endpoint)
+      log(`cdp_interact(action=${action})`)
+      const client = makeClient(endpoint)
+      const target = await pickTarget(client, args.targetId)
+      const session = await client.connect(target.wsUrl)
+      try {
+        switch (action) {
+          case 'navigate': {
+            if (typeof args.url !== 'string' || args.url.trim() === '') {
+              throw new Error('cdp_interact: url is required for action=navigate')
+            }
+            // Register the load listener before navigating: fast loads can fire
+            // the event immediately after the navigate response.
+            const loadFired = waitForEvent(session, 'Page.loadEventFired', 30_000)
+            const result = await session.send('Page.navigate', { url: args.url }) as Record<string, unknown>
+            if (typeof result.errorText === 'string' && result.errorText !== '') {
+              throw new Error(`cdp_interact: navigation failed: ${result.errorText}`)
+            }
+            await loadFired
+            const state = await evaluateJson(session, '({ title: document.title, url: location.href, readyState: document.readyState })')
+            return { action, targetId: target.id, ...(isRecord(state) ? state : {}) }
+          }
+          case 'click': {
+            if (typeof args.selector !== 'string' || args.selector === '') {
+              throw new Error('cdp_interact: selector is required for action=click')
+            }
+            const result = await evaluateJson(session, `(() => {
+              const el = document.querySelector(${JSON.stringify(args.selector)});
+              if (!el) return { found: false };
+              el.click();
+              return { found: true };
+            })()`)
+            return { action, targetId: target.id, selector: args.selector, ...(isRecord(result) ? result : {}) }
+          }
+          case 'type': {
+            if (typeof args.selector !== 'string' || args.selector === '') {
+              throw new Error('cdp_interact: selector is required for action=type')
+            }
+            if (typeof args.text !== 'string') {
+              throw new Error('cdp_interact: text is required for action=type')
+            }
+            const result = await evaluateJson(session, `(() => {
+              const el = document.querySelector(${JSON.stringify(args.selector)});
+              if (!el) return { found: false };
+              el.focus();
+              const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+              const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+              if (setter) setter.call(el, ${JSON.stringify(args.text)});
+              else el.value = ${JSON.stringify(args.text)};
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return { found: true };
+            })()`)
+            return { action, targetId: target.id, selector: args.selector, ...(isRecord(result) ? result : {}) }
+          }
+          case 'wait': {
+            if (typeof args.selector === 'string' && args.selector !== '') {
+              const timeoutMs = typeof args.duration === 'number' ? args.duration : 10_000
+              const deadline = Date.now() + timeoutMs
+              while (Date.now() < deadline) {
+                const found = await evaluateJson(session, `!!document.querySelector(${JSON.stringify(args.selector)})`)
+                if (found === true) return { action, targetId: target.id, selector: args.selector, found: true }
+                await new Promise(resolve => setTimeout(resolve, 100))
+              }
+              throw new Error(`cdp_interact: timed out waiting for ${args.selector}`)
+            }
+            const duration = typeof args.duration === 'number' ? args.duration : 1000
+            await new Promise(resolve => setTimeout(resolve, duration))
+            return { action, targetId: target.id, waitedMs: duration }
+          }
+          case 'scroll': {
+            if (typeof args.selector === 'string' && args.selector !== '') {
+              await evaluateJson(session, `document.querySelector(${JSON.stringify(args.selector)})?.scrollIntoView()`)
+              return { action, targetId: target.id, selector: args.selector }
+            }
+            await evaluateJson(session, 'window.scrollTo(0, document.body ? document.body.scrollHeight : 0)')
+            return { action, targetId: target.id }
+          }
+          case 'read': {
+            const expression = typeof args.selector === 'string' && args.selector !== ''
+              ? `document.querySelector(${JSON.stringify(args.selector)})?.innerText ?? ''`
+              : 'document.body ? document.body.innerText : ""'
+            const text = await evaluateJson(session, expression)
+            return {
+              action,
+              targetId: target.id,
+              ...(typeof args.selector === 'string' && args.selector !== '' ? { selector: args.selector } : {}),
+              text: String(text ?? ''),
+            }
+          }
+          default:
+            throw new Error(`cdp_interact: unsupported action ${String(action)}`)
+        }
       } finally {
         session.close()
       }
